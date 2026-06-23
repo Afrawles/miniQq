@@ -37,7 +37,7 @@ func (m *MemoryStore) Dequeue() (*Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for e := m.order.Front(); e != nil ; e.Next() {
+	for e := m.order.Front(); e != nil ; e = e.Next() {
 		j, ok := e.Value.(*Job)
 		if !ok {
 			break
