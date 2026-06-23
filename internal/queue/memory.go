@@ -20,6 +20,9 @@ func New() *MemoryStore {
 	}
 }
 
+
+var _ Store = (*MemoryStore)(nil)
+
 func (m *MemoryStore) Enqueue(j *Job) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -28,4 +31,28 @@ func (m *MemoryStore) Enqueue(j *Job) error {
 	m.order.PushBack(j)
 
 	return nil
+}
+
+func (m *MemoryStore) Dequeue() (*Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for e := m.order.Front(); e != nil ; e.Next() {
+		j, ok := e.Value.(*Job)
+		if !ok {
+			break
+		}
+
+		if j.Status == StatusPending {
+			j.Status = StatusProcessing
+
+			m.order.Remove(e)
+
+			return j, nil
+		}
+
+		continue
+	}
+
+	return nil, nil
 }

@@ -2,5 +2,5 @@ package queue
 
 type Store interface {
 	Enqueue(*Job) error 
-	Dequeue() error 
+	Dequeue() (*Job, error) 
 }
