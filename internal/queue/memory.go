@@ -40,7 +40,7 @@ func (m *MemoryStore) Dequeue() (*Job, error) {
 	for e := m.order.Front(); e != nil ; e = e.Next() {
 		j, ok := e.Value.(*Job)
 		if !ok {
-			break
+			continue
 		}
 
 		if j.Status == StatusPending {
