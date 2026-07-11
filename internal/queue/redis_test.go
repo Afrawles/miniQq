@@ -11,10 +11,13 @@ import (
 func TestRedisEnqueue(t *testing.T) {
 	s := miniredis.RunT(t)
 
-	ms := NewRedisStore(s.Addr())
-	defer ms.Close()
-
 	ctx := context.Background()
+
+	ms, err := NewRedisStore(ctx, s.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ms.Close()
 
 	want := uuid.NewString()
 
@@ -48,7 +51,10 @@ func TestRedisEnqueue(t *testing.T) {
 func TestRedisDequeue(t *testing.T) {
 	s := miniredis.RunT(t)
 
-	ms := NewRedisStore(s.Addr())
+	ms, err := NewRedisStore(ctx, s.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer ms.Close()
 
 	ctx := context.Background()
@@ -80,11 +86,13 @@ func TestRedisDequeue(t *testing.T) {
 
 func TestRedisDequeueMovesToProcessing(t *testing.T) {
 	s := miniredis.RunT(t)
-
-	ms := NewRedisStore(s.Addr())
-	defer ms.Close()
-
 	ctx := context.Background()
+
+	ms, err := NewRedisStore(ctx, s.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ms.Close()
 
 	job := Job{ID: uuid.NewString()}
 

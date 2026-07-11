@@ -11,13 +11,18 @@ type RedisStore struct {
 	client *redis.Client
 }
 
-func NewRedisStore(addr string) *RedisStore {
+func NewRedisStore(ctx context.Context, addr string) (*RedisStore, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 	})
-	return &RedisStore{
-		client: client,
+
+	if res, err := client.Ping(ctx).Result(); err != nil {
+		return nil, fmt.Errorf("redis connect: %w", err)
+	} else {
+		fmt.Printf("\n>>> %s <<<\n", res)
 	}
+
+	return &RedisStore{client: client}, nil
 }
 
 var _ Store = (*RedisStore)(nil)
