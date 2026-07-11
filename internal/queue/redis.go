@@ -35,7 +35,7 @@ func (r *RedisStore) Enqueue(ctx context.Context, j *Job) error {
 }
 
 func (r *RedisStore) Dequeue(ctx context.Context) (*Job, error) {
-	id, err := r.client.RPop(ctx, "queue:default:ready").Result()
+	id, err := r.client.LMove(ctx, "queue:default:ready", "queue:default:processing", "RIGHT", "LEFT").Result()
 	if err != nil {
 		return nil, err
 	}

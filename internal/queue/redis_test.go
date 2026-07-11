@@ -9,8 +9,6 @@ import (
 )
 
 func TestRedisEnqueue(t *testing.T) {
-	t.Parallel()
-
 	s := miniredis.RunT(t)
 
 	ms := NewRedisStore(s.Addr())
@@ -48,8 +46,6 @@ func TestRedisEnqueue(t *testing.T) {
 }
 
 func TestRedisDequeue(t *testing.T) {
-	t.Parallel()
-
 	s := miniredis.RunT(t)
 
 	ms := NewRedisStore(s.Addr())
@@ -80,4 +76,35 @@ func TestRedisDequeue(t *testing.T) {
 			t.Errorf("want %q, got %q", StatusProcessing, j.Status)
 		}
 	})
+}
+
+func TestRedisDequeueMovesToProcessing(t *testing.T) {
+	s := miniredis.RunT(t)
+
+	ms := NewRedisStore(s.Addr())
+	defer ms.Close()
+
+	ctx := context.Background()
+
+	job := Job{ID: uuid.NewString()}
+
+	if err := ms.Enqueue(ctx, &job); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ms.Dequeue(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	readyQ, _ := s.List("queue:default:ready")
+
+	if len(readyQ) != 0 {
+		t.Errorf("expected empty reqdy queue, got %v", readyQ)
+	}
+
+	processingQ, _ := s.List("queue:default:processing")
+
+	if len(processingQ) != 1 || processingQ[0] != job.ID {
+		t.Errorf("expected queue to contain %q, got %v", job.ID, processingQ)
+	}
 }
