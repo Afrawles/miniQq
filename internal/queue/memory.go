@@ -55,3 +55,7 @@ func (m *MemoryStore) Dequeue(_ context.Context) (*Job, error) {
 
 	return nil, nil
 }
+
+func (m *MemoryStore) Close() error {
+	return nil
+}

@@ -28,14 +28,37 @@ func (r *RedisStore) Enqueue(ctx context.Context, j *Job) error {
 		return err
 	}
 
-	_, err = r.client.LPush(ctx, fmt.Sprintf("queue:%s:ready", "default"), j.ID).Result()
-
-	if err != nil {
+	if _, err := r.client.LPush(ctx, "queue:default:ready", j.ID).Result(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *RedisStore) Dequeue(_ context.Context) (*Job, error) {
-	return nil, nil
+func (r *RedisStore) Dequeue(ctx context.Context) (*Job, error) {
+	id, err := r.client.RPop(ctx, "queue:default:ready").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	k := "job:" + id
+	var job Job
+	if err := r.client.HGetAll(ctx, k).Scan(&job); err != nil {
+		return nil, err
+	}
+
+	if job.ID == "" {
+		return nil, fmt.Errorf("job: %s not found", id)
+	}
+
+	job.Status = StatusProcessing
+
+	if _, err := r.client.HSet(ctx, "job:"+job.ID, job).Result(); err != nil {
+		return nil, err
+	}
+
+	return &job, nil
+}
+
+func (r *RedisStore) Close() error {
+	return r.client.Close()
 }
