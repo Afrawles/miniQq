@@ -1,35 +1,38 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
 )
 
 const (
-	firstJob = "first_job"
+	firstJob  = "first_job"
 	secondJob = "second_job"
 )
+
+var ctx = context.Background()
 
 func TestEnqueue(t *testing.T) {
 	ms := New()
 
 	job1 := Job{
-		ID: firstJob,
+		ID:     firstJob,
 		Status: StatusPending,
-	}	
+	}
 
-	err := ms.Enqueue(&job1)
+	err := ms.Enqueue(ctx, &job1)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	job2 := Job{
-		ID: secondJob,
+		ID:     secondJob,
 		Status: StatusPending,
 	}
-	err = ms.Enqueue(&job2)
+	err = ms.Enqueue(ctx, &job2)
 
 	if err != nil {
 		t.Fatal(err)
@@ -53,28 +56,28 @@ func TestDequeue(t *testing.T) {
 	ms := New()
 
 	job1 := Job{
-		ID: firstJob,
+		ID:     firstJob,
 		Status: StatusPending,
 	}
 
-	err := ms.Enqueue(&job1)
+	err := ms.Enqueue(ctx, &job1)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	job2 := Job{
-		ID: secondJob,
+		ID:     secondJob,
 		Status: StatusPending,
 	}
 
-	err = ms.Enqueue(&job2)
+	err = ms.Enqueue(ctx, &job2)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	j, err := ms.Dequeue()
+	j, err := ms.Dequeue(ctx)
 
 	if err != nil {
 		t.Fatal(err)
@@ -92,13 +95,13 @@ func TestMultipleEnqueueDequeue(t *testing.T) {
 	numWorker := 10
 	numJobsPerWorker := 2
 
-	for i:=1; i<=20; i++ {
-		job :=  Job{
-			ID: fmt.Sprintf("job_%d", i), 
+	for i := 1; i <= 20; i++ {
+		job := Job{
+			ID:     fmt.Sprintf("job_%d", i),
 			Status: StatusPending,
 		}
 
-		err := ms.Enqueue(&job)
+		err := ms.Enqueue(ctx, &job)
 		if err != nil {
 			t.Fatalf("failed to enqueue: %v", err)
 		}
@@ -106,12 +109,12 @@ func TestMultipleEnqueueDequeue(t *testing.T) {
 
 	for range numWorker {
 		wg.Add(1)
-		
+
 		go func() {
 			defer wg.Done()
 
 			for range numJobsPerWorker {
-				j, err := ms.Dequeue()
+				j, err := ms.Dequeue(ctx)
 				if err != nil {
 					t.Errorf("failed to edequeu: %v", err)
 					return

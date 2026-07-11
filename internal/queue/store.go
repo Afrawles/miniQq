@@ -1,6 +1,8 @@
 package queue
 
+import "context"
+
 type Store interface {
-	Enqueue(*Job) error 
-	Dequeue() (*Job, error) 
+	Enqueue(context.Context, *Job) error
+	Dequeue(context.Context) (*Job, error)
 }

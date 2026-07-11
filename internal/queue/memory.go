@@ -2,13 +2,13 @@ package queue
 
 import (
 	"container/list"
+	"context"
 	"sync"
-
 )
 
 type MemoryStore struct {
 	store map[string]*Job
-	mu sync.Mutex
+	mu    sync.Mutex
 
 	order *list.List
 }
@@ -20,10 +20,9 @@ func New() *MemoryStore {
 	}
 }
 
-
 var _ Store = (*MemoryStore)(nil)
 
-func (m *MemoryStore) Enqueue(j *Job) error {
+func (m *MemoryStore) Enqueue(_ context.Context, j *Job) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -33,11 +32,11 @@ func (m *MemoryStore) Enqueue(j *Job) error {
 	return nil
 }
 
-func (m *MemoryStore) Dequeue() (*Job, error) {
+func (m *MemoryStore) Dequeue(_ context.Context) (*Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for e := m.order.Front(); e != nil ; e = e.Next() {
+	for e := m.order.Front(); e != nil; e = e.Next() {
 		j, ok := e.Value.(*Job)
 		if !ok {
 			continue
