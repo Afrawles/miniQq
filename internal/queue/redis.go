@@ -58,7 +58,7 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 
 	job.Status = StatusProcessing
 
-	if _, err := r.client.HSet(ctx, "job:"+job.ID, job).Result(); err != nil {
+	if _, err := r.client.HSet(ctx, k, "status", StatusProcessing).Result(); err != nil {
 		return nil, err
 	}
 
