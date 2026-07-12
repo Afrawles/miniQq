@@ -122,7 +122,7 @@ func TestRedisDequeueMovesToProcessing(t *testing.T) {
 		t.Errorf("expected empty ready queue, got %v", readyQ)
 	}
 
-	processingQ, _ := s.List("queue:default:"+qNameProcessing)
+	processingQ, _ := s.List("queue:default:" + qNameProcessing)
 
 	if len(processingQ) != 1 || processingQ[0] != job.ID {
 		t.Errorf("expected queue to contain %q, got %v", job.ID, processingQ)
@@ -215,7 +215,7 @@ func TestClaimCompleteJob(t *testing.T) {
 	qTestReady := "test-" + uuid.NewString()
 	qTestProcessing := "test-" + uuid.NewString()
 
-	t.Run("enqeue job", func(t *testing.T){
+	t.Run("enqeue job", func(t *testing.T) {
 		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +232,6 @@ func TestClaimCompleteJob(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-
 
 	if n, err := ms.client.LLen(ctx, "queue:default:"+qTestProcessing).Result(); err != nil {
 		t.Fatal(err)
