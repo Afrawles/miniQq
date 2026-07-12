@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -29,12 +30,12 @@ func NewRedisStore(ctx context.Context, addr string) (*RedisStore, error) {
 var _ Store = (*RedisStore)(nil)
 
 func (r *RedisStore) Enqueue(ctx context.Context, j *Job, qname string) error {
-	_, err := r.client.HSet(ctx, "job:"+j.ID, j).Result()
+	err := r.client.HSet(ctx, "job:"+j.ID, j).Err()
 	if err != nil {
 		return err
 	}
 
-	if _, err := r.client.LPush(ctx, "queue:default:"+qname, j.ID).Result(); err != nil {
+	if err := r.client.LPush(ctx, "queue:default:"+qname, j.ID).Err(); err != nil {
 		return err
 	}
 	return nil
@@ -58,7 +59,7 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 
 	job.Status = StatusProcessing
 
-	if _, err := r.client.HSet(ctx, k, "status", StatusProcessing).Result(); err != nil {
+	if err := r.client.HSet(ctx, k, "status", StatusProcessing).Err(); err != nil {
 		return nil, err
 	}
 
@@ -67,4 +68,38 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 
 func (r *RedisStore) Close() error {
 	return r.client.Close()
+}
+
+func (m *RedisStore) Complete(ctx context.Context, id, qname string) error {
+	if err := m.client.LRem(ctx, "queue:default:"+qname, 1, id).Err(); err != nil {
+		return err
+	}
+
+	k := "job:" + id
+	if err := m.client.HSet(ctx, k, "status", StatusDone).Err(); err != nil {
+		return err
+	}
+
+	if err := m.client.Incr(ctx, "stats:"+qname+":done").Err(); err != nil {
+		log.Printf("WARNING: failed to increment done stats for queue %q : %v", qname, err)
+	}
+
+	return nil
+}
+
+func (m *RedisStore) Fail(ctx context.Context, id, qname string, err error) error {
+	if err := m.client.LRem(ctx, "queue:default:"+qname, 1, id).Err(); err != nil {
+		return err
+	}
+
+	k := "job:" + id
+
+	if err := m.client.HIncrBy(ctx, k, "attempts", 1).Err(); err != nil {
+		return err
+	}
+
+	if err := m.client.HSet(ctx, k, "last_error", err.Error()).Err(); err != nil {
+		return err
+	}
+	return nil
 }

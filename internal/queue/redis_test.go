@@ -1,4 +1,4 @@
-//go:build integration
+////go:build integration
 
 package queue
 
@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	qNameReady = "ready"
+	qNameReady      = "ready"
 	qNameProcessing = "processing"
 )
 
@@ -42,7 +42,7 @@ func TestRedisEnqueue(t *testing.T) {
 	}
 
 	t.Run("pushes job id to queue", func(t *testing.T) {
-		id, err := s.Lpop("queue:default:"+qNameReady)
+		id, err := s.Lpop("queue:default:" + qNameReady)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,10 +119,10 @@ func TestRedisDequeueMovesToProcessing(t *testing.T) {
 	readyQ, _ := s.List("queue:default:ready")
 
 	if len(readyQ) != 0 {
-		t.Errorf("expected empty reqdy queue, got %v", readyQ)
+		t.Errorf("expected empty ready queue, got %v", readyQ)
 	}
 
-	processingQ, _ := s.List("queue:default:processing")
+	processingQ, _ := s.List("queue:default:"+qNameProcessing)
 
 	if len(processingQ) != 1 || processingQ[0] != job.ID {
 		t.Errorf("expected queue to contain %q, got %v", job.ID, processingQ)
@@ -142,14 +142,14 @@ func TestConcurrentNoDoubleClaim(t *testing.T) {
 	defer ms.Close()
 
 	// ensure each unique test run uses unique queue
-	uniqueQname := "miniqq:"+uuid.NewString()
+	uniqueQname := "miniqq:" + uuid.NewString()
 
 	var (
-		sm sync.Map
-		wg sync.WaitGroup
-		dupCount uint64
-		claimCnt uint64 
-		numJobs = 500
+		sm         sync.Map
+		wg         sync.WaitGroup
+		dupCount   uint64
+		claimCnt   uint64
+		numJobs    = 500
 		numWorkers = 30
 	)
 
@@ -199,4 +199,100 @@ func TestConcurrentNoDoubleClaim(t *testing.T) {
 		t.Errorf("expected 0 dupes , got: %d", got)
 	}
 
+}
+
+func TestClaimCompleteJob(t *testing.T) {
+	ctx := context.Background()
+
+	ms, err := NewRedisStore(ctx, *raddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ms.Close()
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qTestReady := "test-" + uuid.NewString()
+	qTestProcessing := "test-" + uuid.NewString()
+
+	t.Run("enqeue job", func(t *testing.T){
+		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("dequeue job", func(t *testing.T) {
+		if _, err := ms.Dequeue(ctx, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("complete job", func(t *testing.T) {
+		if err := ms.Complete(ctx, id, qTestProcessing); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+
+	if n, err := ms.client.LLen(ctx, "queue:default:"+qTestProcessing).Result(); err != nil {
+		t.Fatal(err)
+	} else {
+		if n != 0 {
+			t.Errorf("expected empty queue %s, got %d", "queue:default:"+qTestProcessing, n)
+		}
+	}
+
+	status, err := ms.client.HGet(ctx, "job:"+id, "status").Result()
+	if err != nil {
+		t.Fatalf("HGet failed: %v", err)
+	}
+	if status != StatusDone.String() {
+		t.Errorf("expected status %s got %v", StatusDone.String(), status)
+	}
+}
+
+func TestClaimFailJob(t *testing.T) {
+	ctx := context.Background()
+	ms, err := NewRedisStore(ctx, *raddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ms.Close()
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qTestReady := "test-" + uuid.NewString()
+	qTestProcessing := "test-" + uuid.NewString()
+
+	t.Run("enqueue job", func(t *testing.T) {
+		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("dequeue job", func(t *testing.T) {
+		if _, err := ms.Dequeue(ctx, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("fail job", func(t *testing.T) {
+		if err := ms.Fail(ctx, id, qTestProcessing, errors.New("terror")); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if n, err := ms.client.LLen(ctx, "queue:default:"+qTestProcessing).Result(); err != nil {
+		t.Fatal(err)
+	} else if n != 0 {
+		t.Errorf("expected empty queue, got %d", n)
+	}
+
+	attempts, err := ms.client.HGet(ctx, "job:"+id, "attempts").Result()
+	if err != nil || attempts != "1" {
+		t.Errorf("expected attempts=1, got %v (err=%v)", attempts, err)
+	}
+
+	lastErr, err := ms.client.HGet(ctx, "job:"+id, "last_error").Result()
+	if err != nil || lastErr != "terror" {
+		t.Errorf("expected last_error=terror, got %v (err=%v)", lastErr, err)
+	}
 }
