@@ -22,7 +22,7 @@ func New() *MemoryStore {
 
 var _ Store = (*MemoryStore)(nil)
 
-func (m *MemoryStore) Enqueue(_ context.Context, j *Job) error {
+func (m *MemoryStore) Enqueue(_ context.Context, j *Job, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -32,7 +32,7 @@ func (m *MemoryStore) Enqueue(_ context.Context, j *Job) error {
 	return nil
 }
 
-func (m *MemoryStore) Dequeue(_ context.Context) (*Job, error) {
+func (m *MemoryStore) Dequeue(_ context.Context, _ string) (*Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

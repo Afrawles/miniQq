@@ -22,7 +22,7 @@ func TestEnqueue(t *testing.T) {
 		Status: StatusPending,
 	}
 
-	err := ms.Enqueue(ctx, &job1)
+	err := ms.Enqueue(ctx, &job1, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestEnqueue(t *testing.T) {
 		ID:     secondJob,
 		Status: StatusPending,
 	}
-	err = ms.Enqueue(ctx, &job2)
+	err = ms.Enqueue(ctx, &job2, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestDequeue(t *testing.T) {
 		Status: StatusPending,
 	}
 
-	err := ms.Enqueue(ctx, &job1)
+	err := ms.Enqueue(ctx, &job1, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -71,13 +71,13 @@ func TestDequeue(t *testing.T) {
 		Status: StatusPending,
 	}
 
-	err = ms.Enqueue(ctx, &job2)
+	err = ms.Enqueue(ctx, &job2, "")
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	j, err := ms.Dequeue(ctx)
+	j, err := ms.Dequeue(ctx, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestMultipleEnqueueDequeue(t *testing.T) {
 			Status: StatusPending,
 		}
 
-		err := ms.Enqueue(ctx, &job)
+		err := ms.Enqueue(ctx, &job, "")
 		if err != nil {
 			t.Fatalf("failed to enqueue: %v", err)
 		}
@@ -114,9 +114,9 @@ func TestMultipleEnqueueDequeue(t *testing.T) {
 			defer wg.Done()
 
 			for range numJobsPerWorker {
-				j, err := ms.Dequeue(ctx)
+				j, err := ms.Dequeue(ctx, "")
 				if err != nil {
-					t.Errorf("failed to edequeu: %v", err)
+					t.Errorf("failed to dequeue: %v", err)
 					return
 				}
 

@@ -3,7 +3,7 @@ package queue
 import "context"
 
 type Store interface {
-	Enqueue(context.Context, *Job) error
-	Dequeue(context.Context) (*Job, error)
+	Enqueue(ctx context.Context, j *Job, qname string) error
+	Dequeue(ctx context.Context, qname string) (*Job, error)
 	Close() error
 }

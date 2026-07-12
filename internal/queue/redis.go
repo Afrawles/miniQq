@@ -16,10 +16,11 @@ func NewRedisStore(ctx context.Context, addr string) (*RedisStore, error) {
 		Addr: addr,
 	})
 
+	fmt.Println("\n\t\t<<< PING >>>")
 	if res, err := client.Ping(ctx).Result(); err != nil {
 		return nil, fmt.Errorf("redis connect: %w", err)
 	} else {
-		fmt.Printf("\n>>> %s <<<\n", res)
+		fmt.Printf("\n\t\t>>> %s <<<\n\n", res)
 	}
 
 	return &RedisStore{client: client}, nil
@@ -27,20 +28,20 @@ func NewRedisStore(ctx context.Context, addr string) (*RedisStore, error) {
 
 var _ Store = (*RedisStore)(nil)
 
-func (r *RedisStore) Enqueue(ctx context.Context, j *Job) error {
-	_, err := r.client.HSet(ctx, fmt.Sprintf("job:%s", j.ID), j).Result()
+func (r *RedisStore) Enqueue(ctx context.Context, j *Job, qname string) error {
+	_, err := r.client.HSet(ctx, "job:"+j.ID, j).Result()
 	if err != nil {
 		return err
 	}
 
-	if _, err := r.client.LPush(ctx, "queue:default:ready", j.ID).Result(); err != nil {
+	if _, err := r.client.LPush(ctx, "queue:default:"+qname, j.ID).Result(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *RedisStore) Dequeue(ctx context.Context) (*Job, error) {
-	id, err := r.client.LMove(ctx, "queue:default:ready", "queue:default:processing", "RIGHT", "LEFT").Result()
+func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
+	id, err := r.client.LMove(ctx, "queue:default:"+qname, "queue:default:processing", "RIGHT", "LEFT").Result()
 	if err != nil {
 		return nil, err
 	}
