@@ -18,7 +18,25 @@ import (
 var (
 	qNameReady      = "ready"
 	qNameProcessing = "processing"
+	raddr = flag.String("rddr", "localhost:6379", "Redis Address")
 )
+
+
+func setupRedisStoreTest(t *testing.T) (*RedisStore, context.Context) {
+	t.Helper()
+	ctx := context.Background()
+	ms, err := NewRedisStore(ctx, *raddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := ms.client.FlushDB(ctx).Err(); err != nil {
+			t.Logf("failed to flush redis: %v", err)
+		}
+		ms.Close()
+	})
+	return ms, ctx
+}
 
 func TestRedisEnqueue(t *testing.T) {
 	s := miniredis.RunT(t)
@@ -129,17 +147,8 @@ func TestRedisDequeueMovesToProcessing(t *testing.T) {
 	}
 }
 
-var raddr = flag.String("rddr", "localhost:6379", "Redis Address")
-
 func TestConcurrentNoDoubleClaim(t *testing.T) {
-	ctx := context.Background()
-
-	ms, err := NewRedisStore(ctx, *raddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer ms.Close()
+	ms, ctx := setupRedisStoreTest(t)
 
 	// ensure each unique test run uses unique queue
 	uniqueQname := "miniqq:" + uuid.NewString()
@@ -202,13 +211,7 @@ func TestConcurrentNoDoubleClaim(t *testing.T) {
 }
 
 func TestClaimCompleteJob(t *testing.T) {
-	ctx := context.Background()
-
-	ms, err := NewRedisStore(ctx, *raddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ms.Close()
+	ms, ctx := setupRedisStoreTest(t)
 
 	id := uuid.NewString()
 	job := Job{ID: id}
@@ -251,12 +254,7 @@ func TestClaimCompleteJob(t *testing.T) {
 }
 
 func TestClaimFailJob(t *testing.T) {
-	ctx := context.Background()
-	ms, err := NewRedisStore(ctx, *raddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ms.Close()
+	ms, ctx := setupRedisStoreTest(t)
 
 	id := uuid.NewString()
 	job := Job{ID: id}
