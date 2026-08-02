@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -60,7 +61,7 @@ func TestRedisEnqueue(t *testing.T) {
 	}
 
 	t.Run("pushes job id to queue", func(t *testing.T) {
-		id, err := s.Lpop("queue:default:" + qNameReady)
+		id, err := s.Lpop(readKey(qNameReady))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,13 +82,13 @@ func TestRedisEnqueue(t *testing.T) {
 func TestRedisDequeue(t *testing.T) {
 	s := miniredis.RunT(t)
 
+	ctx := context.Background()
+
 	ms, err := NewRedisStore(ctx, s.Addr())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ms.Close()
-
-	ctx := context.Background()
 
 	want := uuid.NewString()
 	job := Job{ID: want}
@@ -134,13 +135,13 @@ func TestRedisDequeueMovesToProcessing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readyQ, _ := s.List("queue:default:ready")
+	readyQ, _ := s.List(readKey(qNameReady))
 
 	if len(readyQ) != 0 {
 		t.Errorf("expected empty ready queue, got %v", readyQ)
 	}
 
-	processingQ, _ := s.List("queue:default:" + qNameProcessing)
+	processingQ, _ := s.List(processingKey(qNameReady))
 
 	if len(processingQ) != 1 || processingQ[0] != job.ID {
 		t.Errorf("expected queue to contain %q, got %v", job.ID, processingQ)
@@ -216,7 +217,6 @@ func TestClaimCompleteJob(t *testing.T) {
 	id := uuid.NewString()
 	job := Job{ID: id}
 	qTestReady := "test-" + uuid.NewString()
-	qTestProcessing := "test-" + uuid.NewString()
 
 	t.Run("enqeue job", func(t *testing.T) {
 		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
@@ -231,16 +231,16 @@ func TestClaimCompleteJob(t *testing.T) {
 	})
 
 	t.Run("complete job", func(t *testing.T) {
-		if err := ms.Complete(ctx, id, qTestProcessing); err != nil {
+		if err := ms.Complete(ctx, id, qTestReady); err != nil {
 			t.Fatal(err)
 		}
 	})
 
-	if n, err := ms.client.LLen(ctx, "queue:default:"+qTestProcessing).Result(); err != nil {
+	if n, err := ms.client.LLen(ctx, processingKey(qTestReady)).Result(); err != nil {
 		t.Fatal(err)
 	} else {
 		if n != 0 {
-			t.Errorf("expected empty queue %s, got %d", "queue:default:"+qTestProcessing, n)
+			t.Errorf("expected empty queue %s, got %d", processingKey(qTestReady), n)
 		}
 	}
 
@@ -259,7 +259,6 @@ func TestClaimFailJob(t *testing.T) {
 	id := uuid.NewString()
 	job := Job{ID: id}
 	qTestReady := "test-" + uuid.NewString()
-	qTestProcessing := "test-" + uuid.NewString()
 
 	t.Run("enqueue job", func(t *testing.T) {
 		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
@@ -272,12 +271,12 @@ func TestClaimFailJob(t *testing.T) {
 		}
 	})
 	t.Run("fail job", func(t *testing.T) {
-		if err := ms.Fail(ctx, id, qTestProcessing, errors.New("terror")); err != nil {
+		if err := ms.Fail(ctx, id, qTestReady, errors.New("terror")); err != nil {
 			t.Fatal(err)
 		}
 	})
 
-	if n, err := ms.client.LLen(ctx, "queue:default:"+qTestProcessing).Result(); err != nil {
+	if n, err := ms.client.LLen(ctx, processingKey(qTestReady)).Result(); err != nil {
 		t.Fatal(err)
 	} else if n != 0 {
 		t.Errorf("expected empty queue, got %d", n)
@@ -291,5 +290,103 @@ func TestClaimFailJob(t *testing.T) {
 	lastErr, err := ms.client.HGet(ctx, "job:"+id, "last_error").Result()
 	if err != nil || lastErr != "terror" {
 		t.Errorf("expected last_error=terror, got %v (err=%v)", lastErr, err)
+	}
+}
+
+func TestJobFailsTwiceInRetry(t *testing.T) {
+	ms, ctx := setupRedisStoreTest(t)
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qTestReady := "test-" + uuid.NewString()
+
+	t.Run("enqueue job", func(t *testing.T) {
+		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("dequeue job", func(t *testing.T) {
+		if _, err := ms.Dequeue(ctx, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for i:=1; i <= 2; i++ {
+		t.Run("fail: job->"+strconv.Itoa(i), func(t *testing.T) {
+			if err := ms.Fail(ctx, id, qTestReady, errors.New("terror")); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+
+
+	_, err := ms.client.ZScore(ctx, retryKey(qTestReady), job.ID).Result()
+	if err != nil {
+		t.Errorf("expected job in retry zset, got err: %v", err)
+	}
+
+	attempts, err := ms.client.HGet(ctx, "job:"+job.ID, "attempts").Result()
+	if err != nil || attempts != "2" {
+		t.Errorf("expected attempts=2, got %v (err=%v)", attempts, err)
+	}
+
+}
+// one where it fails until max_attempts and ends up in dead list with status dead.
+func TestJobFailsUntilMaxAttemptInDeadList(t *testing.T) {
+	ms, ctx := setupRedisStoreTest(t)
+
+	id := uuid.NewString()
+	maxAttempts := int64(10)
+	job := Job{ID: id, MaxAttempts: &maxAttempts}
+	qName := "test-" + uuid.NewString()
+
+	t.Run("enqueue job", func(t *testing.T) {
+		if err := ms.Enqueue(ctx, &job, qName); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("dequeue job", func(t *testing.T) {
+		if _, err := ms.Dequeue(ctx, qName); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for i :=  range maxAttempts {
+		t.Run("fail: job->"+strconv.Itoa(int(i)), func(t *testing.T) {
+			if err := ms.Fail(ctx, id, qName, errors.New("terror")); err != nil {
+				t.Error(err)
+			}
+
+			if i < maxAttempts - 1 {
+				stillInZset(t, ms, ctx, qName, &job)
+			}
+
+		})
+	}
+
+	result, _ := ms.client.LRange(ctx, deadKey(qName), 0, -1).Result()
+
+	if len(result) != 1 || result[0] != job.ID {
+		t.Errorf("expected queue to contain %q, got %v", job.ID, result)
+	}
+
+	status, err := ms.client.HGet(ctx, "job:"+id, "status").Result()
+	if err != nil || status != StatusDead.String() {
+		t.Errorf("expected status %s, got %v (err=%v)", StatusDead.String(), status, err)
+	}
+}
+
+
+func stillInZset(t testing.TB, ms *RedisStore, ctx context.Context, qName string, job *Job) {
+	t.Helper()
+
+	_, err := ms.client.ZScore(ctx, retryKey(qName), job.ID).Result()
+	if err != nil {
+		t.Errorf("expected job in retry zset, got err: %v", err)
+	}
+
+	inDead, err := ms.client.LPos(ctx, deadKey(qName), job.ID, redis.LPosArgs{}).Result()
+	if err == nil {
+		t.Errorf("job should not be in dead list yet, but found at position %d", inDead)
 	}
 }
