@@ -19,9 +19,8 @@ import (
 var (
 	qNameReady      = "ready"
 	qNameProcessing = "processing"
-	raddr = flag.String("rddr", "localhost:6379", "Redis Address")
+	raddr           = flag.String("rddr", "localhost:6379", "Redis Address")
 )
-
 
 func setupRedisStoreTest(t *testing.T) (*RedisStore, context.Context) {
 	t.Helper()
@@ -311,14 +310,13 @@ func TestJobFailsTwiceInRetry(t *testing.T) {
 		}
 	})
 
-	for i:=1; i <= 2; i++ {
+	for i := 1; i <= 2; i++ {
 		t.Run("fail: job->"+strconv.Itoa(i), func(t *testing.T) {
 			if err := ms.Fail(ctx, id, qTestReady, errors.New("terror")); err != nil {
 				t.Error(err)
 			}
 		})
 	}
-
 
 	_, err := ms.client.ZScore(ctx, retryKey(qTestReady), job.ID).Result()
 	if err != nil {
@@ -331,6 +329,7 @@ func TestJobFailsTwiceInRetry(t *testing.T) {
 	}
 
 }
+
 // one where it fails until max_attempts and ends up in dead list with status dead.
 func TestJobFailsUntilMaxAttemptInDeadList(t *testing.T) {
 	ms, ctx := setupRedisStoreTest(t)
@@ -351,13 +350,13 @@ func TestJobFailsUntilMaxAttemptInDeadList(t *testing.T) {
 		}
 	})
 
-	for i :=  range maxAttempts {
+	for i := range maxAttempts {
 		t.Run("fail: job->"+strconv.Itoa(int(i)), func(t *testing.T) {
 			if err := ms.Fail(ctx, id, qName, errors.New("terror")); err != nil {
 				t.Error(err)
 			}
 
-			if i < maxAttempts - 1 {
+			if i < maxAttempts-1 {
 				stillInZset(t, ms, ctx, qName, &job)
 			}
 
@@ -375,7 +374,6 @@ func TestJobFailsUntilMaxAttemptInDeadList(t *testing.T) {
 		t.Errorf("expected status %s, got %v (err=%v)", StatusDead.String(), status, err)
 	}
 }
-
 
 func stillInZset(t testing.TB, ms *RedisStore, ctx context.Context, qName string, job *Job) {
 	t.Helper()

@@ -215,7 +215,6 @@ func deadKey(qname string) string {
 	return "queue:" + qname + ":dead"
 }
 
-
 func (j *Job) GetMaxAttempts() int64 {
 	if j.MaxAttempts == nil {
 		return int64(defaulMaxAttempts)

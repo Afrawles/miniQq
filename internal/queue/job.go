@@ -57,7 +57,7 @@ type Job struct {
 	Payload     []byte    `redis:"payload"`
 	Status      JobState  `redis:"status"`
 	Attempts    int64     `redis:"attempts"`
-	MaxAttempts *int64     `redis:"max_attempts"`
+	MaxAttempts *int64    `redis:"max_attempts"`
 	RunAt       time.Time `redis:"run_at"`
 	CreatedAt   time.Time `redis:"created_at"`
 	LastError   string    `redis:"last_error"`
