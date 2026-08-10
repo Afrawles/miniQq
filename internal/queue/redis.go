@@ -2,14 +2,20 @@ package queue
 
 import (
 	"context"
+	_ "embed"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+//go:embed scripts/requeue.lua
+var script string
 
 var defaulMaxAttempts = 5
 
@@ -193,6 +199,28 @@ func (m *RedisStore) nextBackoff(j *Job) time.Duration {
 	}
 
 	return time.Duration(rand.Int63n(int64(b) + 1))
+}
+
+
+func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64, error) {
+	keys := []string{retryKey(qname), readKey(qname)}
+	args := []any{
+		strconv.Itoa(int(time.Now().Unix())),
+		StatusPending.String(),
+	}
+
+	// KEYS[1]=retry, KEYS[2]=ready — must match requeue.lua)
+	n, err := m.client.Eval(ctx, script, keys, args...).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	count, ok := n.(int64)
+	if !ok {
+		return 0, errors.New("wrong data type for count") 
+	}
+
+	return count, nil
 }
 
 func processingKey(qname string) string {

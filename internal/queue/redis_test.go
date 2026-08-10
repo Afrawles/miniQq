@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -387,4 +388,68 @@ func stillInZset(t testing.TB, ms *RedisStore, ctx context.Context, qName string
 	if err == nil {
 		t.Errorf("job should not be in dead list yet, but found at position %d", inDead)
 	}
+}
+
+
+func TestFailedJobInRetry(t *testing.T) {
+	ms, ctx := setupRedisStoreTest(t)
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qTestReady := "test-" + uuid.NewString()
+
+	t.Run("enqueue job", func(t *testing.T) {
+		if err := ms.Enqueue(ctx, &job, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("dequeue job", func(t *testing.T) {
+		if _, err := ms.Dequeue(ctx, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("fail job", func(t *testing.T) {
+		if err := ms.Fail(ctx, id, qTestReady, errors.New("terror")); err != nil {
+			t.Error(err)
+		}
+		// force a deterministic, already-due score so this test isn't racy
+		if err := ms.client.ZAdd(ctx, retryKey(qTestReady), redis.Z{
+			Score:  float64(time.Now().Add(-time.Second).Unix()),
+			Member: id,
+		}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	
+	_, err := ms.RequeueDueRetries(ctx, qTestReady)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n, err := ms.client.LLen(ctx, readKey(qTestReady)).Result(); err != nil {
+		t.Fatal(err)
+	} else {
+		if n != 1 {
+			t.Errorf("expected one item in queue %s, got %d", readKey(qTestReady), n)
+		}
+	}
+
+	t.Run("assert correct job", func(t *testing.T) {
+		result, _ := ms.client.LRange(ctx, readKey(qTestReady), 0, -1).Result()
+
+		if len(result) != 1 || result[0] != job.ID {
+			t.Errorf("expected queue to contain %q, got %v", job.ID, result)
+		}
+	})
+
+	status, err := ms.client.HGet(ctx, "job:"+id, "status").Result()
+	if err != nil {
+		t.Fatalf("HGet failed: %v", err)
+	}
+	if status != StatusPending.String() {
+		t.Errorf("expected status %s got %v", StatusPending.String(), status)
+	}
+
+
 }
