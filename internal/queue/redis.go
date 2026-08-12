@@ -18,6 +18,7 @@ import (
 var script string
 
 var defaulMaxAttempts = 5
+var ErrJobNotFound = errors.New("job not found")
 
 type RedisStore struct {
 	client      *redis.Client
@@ -73,9 +74,33 @@ func (r *RedisStore) Enqueue(ctx context.Context, j *Job, qname string) error {
 	return nil
 }
 
+// EnqueueAt schedules job to run in future
+func (r *RedisStore) EnqueueAt(ctx context.Context, job *Job, runAt time.Time, qname string) error {
+	if job.MaxAttempts == nil {
+		dv := int64(defaulMaxAttempts)
+		job.MaxAttempts = &dv
+	}
+	err := r.client.HSet(ctx, "job:"+job.ID, job).Err()
+	if err != nil {
+		return err
+	}
+
+	if err := r.client.ZAdd(ctx, scheduledKey(qname), redis.Z{
+		Member: job.ID,
+		Score: float64(runAt.Unix()),
+	}).Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 	id, err := r.client.LMove(ctx, readKey(qname), processingKey(qname), "RIGHT", "LEFT").Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrJobNotFound
+		}
 		return nil, err
 	}
 
@@ -86,7 +111,7 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 	}
 
 	if job.ID == "" {
-		return nil, fmt.Errorf("job: %s not found", id)
+		return nil, ErrJobNotFound 
 	}
 
 	job.Status = StatusProcessing
@@ -201,7 +226,7 @@ func (m *RedisStore) nextBackoff(j *Job) time.Duration {
 	return time.Duration(rand.Int63n(int64(b) + 1))
 }
 
-
+// RequeueDueRetries moves due jobs back to retry queue
 func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64, error) {
 	keys := []string{retryKey(qname), readKey(qname)}
 	args := []any{
@@ -210,6 +235,28 @@ func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64
 	}
 
 	// KEYS[1]=retry, KEYS[2]=ready — must match requeue.lua)
+	count, err := callEvalScript(ctx, m, script, keys, args)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (m *RedisStore) RequeueDueScheduled(ctx context.Context, qname string) (int64, error) {
+	keys := []string{scheduledKey(qname), readKey(qname)}
+	args := []any{
+		strconv.Itoa(int(time.Now().Unix())),
+		StatusPending.String(),
+	}
+
+	count, err := callEvalScript(ctx, m, script, keys, args)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func callEvalScript(ctx context.Context, m *RedisStore, script string, keys []string, args []any) (int64, error) {
 	n, err := m.client.Eval(ctx, script, keys, args...).Result()
 	if err != nil {
 		return 0, err
@@ -221,7 +268,7 @@ func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64
 	}
 
 	return count, nil
-}
+} 
 
 func processingKey(qname string) string {
 	return "queue:" + qname + ":processing"
@@ -241,6 +288,10 @@ func doneKey(qname string) string {
 
 func deadKey(qname string) string {
 	return "queue:" + qname + ":dead"
+}
+
+func scheduledKey(qname string) string {
+	return "queue:" + qname + ":scheduled"
 }
 
 func (j *Job) GetMaxAttempts() int64 {

@@ -230,7 +230,7 @@ func TestClaimCompleteJob(t *testing.T) {
 		}
 	})
 
-	t.Run("complete job", func(t *testing.T) {
+t.Run("complete job", func(t *testing.T) {
 		if err := ms.Complete(ctx, id, qTestReady); err != nil {
 			t.Fatal(err)
 		}
@@ -451,5 +451,81 @@ func TestFailedJobInRetry(t *testing.T) {
 		t.Errorf("expected status %s got %v", StatusPending.String(), status)
 	}
 
+
+}
+
+func TestScheduledJobDequeue(t *testing.T) {
+	ms, ctx := setupRedisStoreTest(t)
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qTestReady := "test-" + uuid.NewString()
+	base := time.Now()
+
+	t.Run("schedule job 5 sec out", func(t *testing.T) {
+		when := base.Add(5 * time.Second)
+		if err := ms.EnqueueAt(ctx, &job, when, qTestReady); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("try dequeue job", func(t *testing.T) {
+		job, err := ms.Dequeue(ctx, qTestReady)
+		if err != nil {
+			if !errors.Is(err, ErrJobNotFound) {
+				t.Fatal(err)
+			}
+		}
+		if job != nil {
+			t.Errorf("expected no job, got %q", job.ID)
+		}
+	})
+
+	// set past date as score
+	if err := ms.client.ZAdd(ctx, scheduledKey(qTestReady), redis.Z{
+		Score:  float64(base.Add(-5 * time.Second).Unix()),
+		Member: id,
+	}).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ms.RequeueDueScheduled(ctx, qTestReady)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n, err := ms.client.LLen(ctx, readKey(qTestReady)).Result(); err != nil {
+		t.Fatal(err)
+	} else {
+		if n != 1 {
+			t.Errorf("expected one item in queue %s, got %d", readKey(qTestReady), n)
+		}
+	}
+
+	t.Run("assert correct job", func(t *testing.T) {
+		result, _ := ms.client.LRange(ctx, readKey(qTestReady), 0, -1).Result()
+
+		if len(result) != 1 || result[0] != job.ID {
+			t.Errorf("expected queue to contain %q, got %v", job.ID, result)
+		}
+	})
+
+	status, err := ms.client.HGet(ctx, "job:"+id, "status").Result()
+	if err != nil {
+		t.Fatalf("HGet failed: %v", err)
+	}
+	if status != StatusPending.String() {
+		t.Errorf("expected status %s got %v", StatusPending.String(), status)
+	}
+
+	t.Run("dequeue scheduled job", func(t *testing.T) {
+		j, err := ms.Dequeue(ctx, qTestReady)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if job.ID != j.ID {
+			t.Errorf("expcted job : % v, got %v", job.ID, j.ID)
+		}
+	})
 
 }
