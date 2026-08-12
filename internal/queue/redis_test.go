@@ -180,7 +180,7 @@ func TestConcurrentNoDoubleClaim(t *testing.T) {
 				j, err := ms.Dequeue(ctx, uniqueQname)
 
 				if err != nil {
-					if errors.Is(err, redis.Nil) {
+					if errors.Is(err, ErrJobNotFound) {
 						return
 					}
 					t.Errorf("dequeue by worker <%d> failed: %v", i, err)
