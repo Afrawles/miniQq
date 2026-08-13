@@ -87,7 +87,7 @@ func (r *RedisStore) EnqueueAt(ctx context.Context, job *Job, runAt time.Time, q
 
 	if err := r.client.ZAdd(ctx, scheduledKey(qname), redis.Z{
 		Member: job.ID,
-		Score: float64(runAt.Unix()),
+		Score:  float64(runAt.Unix()),
 	}).Err(); err != nil {
 		return err
 	}
@@ -111,12 +111,18 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 	}
 
 	if job.ID == "" {
-		return nil, ErrJobNotFound 
+		return nil, ErrJobNotFound
 	}
 
 	job.Status = StatusProcessing
 
 	if err := r.client.HSet(ctx, k, "status", StatusProcessing).Err(); err != nil {
+		return nil, err
+	}
+
+	job.ClaimedAt = time.Now().Unix()
+
+	if err := r.client.HSet(ctx, k, "claimed_at", float64(time.Now().Unix())).Err(); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +236,7 @@ func (m *RedisStore) nextBackoff(j *Job) time.Duration {
 func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64, error) {
 	keys := []string{retryKey(qname), readKey(qname)}
 	args := []any{
-		strconv.Itoa(int(time.Now().Unix())),
+		float64(time.Now().Unix()),
 		StatusPending.String(),
 	}
 
@@ -245,7 +251,7 @@ func (m *RedisStore) RequeueDueRetries(ctx context.Context, qname string) (int64
 func (m *RedisStore) RequeueDueScheduled(ctx context.Context, qname string) (int64, error) {
 	keys := []string{scheduledKey(qname), readKey(qname)}
 	args := []any{
-		strconv.Itoa(int(time.Now().Unix())),
+		float64(time.Now().Unix()),
 		StatusPending.String(),
 	}
 
@@ -253,6 +259,64 @@ func (m *RedisStore) RequeueDueScheduled(ctx context.Context, qname string) (int
 	if err != nil {
 		return 0, err
 	}
+	return count, nil
+}
+
+// ReapStale moves staled jobs back to ready whose claimed_at < cutoff
+//
+// this project currently provides at-least-once delivery, not
+// exactly once. job handlers must be idempotent.
+func (m *RedisStore) ReapStale(ctx context.Context, qname string, timeout time.Duration) (int64, error) {
+	elems, err := m.client.LRange(ctx, processingKey(qname), 0, -1).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	if len(elems) == 0 {
+		return 0, nil
+	}
+
+	var count int64
+	rPipe := m.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(elems))
+
+	for i, jobId := range elems {
+		cmds[i] = rPipe.HGet(ctx, "job:"+jobId, "claimed_at")
+	}
+
+	_, _ = rPipe.Exec(ctx)
+	wPipe := m.client.TxPipeline()
+
+	for i, jobId := range elems {
+		result, err := cmds[i].Result()
+		if err != nil {
+			continue
+		}
+
+		claimedAt, err := strconv.ParseInt(result, 10, 64)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		if claimedAt < time.Now().Add(-timeout).Unix() {
+
+			wPipe.LRem(ctx, processingKey(qname), 1, jobId)
+			wPipe.LPush(ctx, readKey(qname), jobId)
+			wPipe.HSet(ctx, "job:"+jobId, "status", StatusPending)
+
+			count++
+		}
+
+	}
+
+	if count > 0 {
+		_, err = wPipe.Exec(ctx)
+		if err != nil {
+			return 0, err
+		}
+	}
+
 	return count, nil
 }
 
@@ -264,11 +328,11 @@ func callEvalScript(ctx context.Context, m *RedisStore, script string, keys []st
 
 	count, ok := n.(int64)
 	if !ok {
-		return 0, errors.New("wrong data type for count") 
+		return 0, errors.New("wrong data type for count")
 	}
 
 	return count, nil
-} 
+}
 
 func processingKey(qname string) string {
 	return "queue:" + qname + ":processing"

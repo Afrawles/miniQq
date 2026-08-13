@@ -230,7 +230,7 @@ func TestClaimCompleteJob(t *testing.T) {
 		}
 	})
 
-t.Run("complete job", func(t *testing.T) {
+	t.Run("complete job", func(t *testing.T) {
 		if err := ms.Complete(ctx, id, qTestReady); err != nil {
 			t.Fatal(err)
 		}
@@ -390,7 +390,6 @@ func stillInZset(t testing.TB, ms *RedisStore, ctx context.Context, qName string
 	}
 }
 
-
 func TestFailedJobInRetry(t *testing.T) {
 	ms, ctx := setupRedisStoreTest(t)
 
@@ -421,7 +420,7 @@ func TestFailedJobInRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	
+
 	_, err := ms.RequeueDueRetries(ctx, qTestReady)
 	if err != nil {
 		t.Fatal(err)
@@ -450,7 +449,6 @@ func TestFailedJobInRetry(t *testing.T) {
 	if status != StatusPending.String() {
 		t.Errorf("expected status %s got %v", StatusPending.String(), status)
 	}
-
 
 }
 
@@ -528,4 +526,57 @@ func TestScheduledJobDequeue(t *testing.T) {
 		}
 	})
 
+}
+
+func TestReapStale(t *testing.T) {
+	ms, ctx := setupRedisStoreTest(t)
+
+	id := uuid.NewString()
+	job := Job{ID: id}
+	qname := "test-" + uuid.NewString()
+
+	t.Run("claim job", func(t *testing.T) {
+		t.Run("enqueue", func(t *testing.T) {
+			if err := ms.Enqueue(ctx, &job, qname); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("dequeue", func(t *testing.T) {
+			j, err := ms.Dequeue(ctx, qname)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if j.ID != id {
+				t.Fatalf("expected job %q , got %q", id, j.ID)
+			}
+
+			// backdate claimed at
+			if err := ms.client.HSet(ctx, "job:"+id, "claimed_at", float64(time.Now().Add(-10*time.Second).Unix())).Err(); err != nil {
+				t.Fatal(err)
+			}
+
+		})
+
+	})
+
+	t.Run("reap stale", func(t *testing.T) {
+		timeout := 5 * time.Second
+		_, err := ms.ReapStale(ctx, qname, timeout)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("dequeue-able", func(t *testing.T) {
+			j, err := ms.Dequeue(ctx, qname)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if job.ID != j.ID {
+				t.Errorf("expcted job : % v, got %v", job.ID, j.ID)
+			}
+		})
+	})
 }
