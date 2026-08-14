@@ -62,4 +62,5 @@ type Job struct {
 	CreatedAt   time.Time `redis:"created_at"`
 	LastError   string    `redis:"last_error"`
 	ClaimedAt   int64     `redis:"claimed_at"`
+	Kind        string    `redis:"kind"`
 }
