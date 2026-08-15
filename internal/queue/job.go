@@ -53,7 +53,6 @@ func (js *JobState) UnmarshalBinary(data []byte) error {
 type Job struct {
 	ID          string    `redis:"id"`
 	Queue       string    `redis:"queue"`
-	Type        string    `redis:"type"`
 	Payload     []byte    `redis:"payload"`
 	Status      JobState  `redis:"status"`
 	Attempts    int64     `redis:"attempts"`

@@ -20,7 +20,6 @@ func New() *MemoryStore {
 	}
 }
 
-var _ Store = (*MemoryStore)(nil)
 
 func (m *MemoryStore) Enqueue(_ context.Context, j *Job, _ string) error {
 	m.mu.Lock()
