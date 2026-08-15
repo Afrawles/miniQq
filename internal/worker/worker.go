@@ -12,9 +12,9 @@ import (
 var interval = 500 * time.Millisecond
 
 func Run(
-	ctx context.Context, 
-	store queue.Store, 
-	registry *handler.Registry, 
+	ctx context.Context,
+	store queue.Store,
+	registry *handler.Registry,
 	queues []string,
 ) error {
 	pulse := time.NewTicker(interval)
@@ -25,11 +25,11 @@ func Run(
 	for {
 		select {
 		case <-ctx.Done():
-		return nil
+			return nil
 		case <-pulse.C:
 			qname := queues[idx]
 			idx = (idx + 1) % len(queues)
-			
+
 			job, err := store.Dequeue(ctx, qname)
 			if err != nil {
 				if errors.Is(err, queue.ErrJobNotFound) {
@@ -62,13 +62,13 @@ func Run(
 				}
 				continue
 			}
-			
+
 			err = store.Complete(ctx, job.ID, qname)
 			if err != nil {
 				return err
 			}
-			
+
 		}
-		
+
 	}
 }

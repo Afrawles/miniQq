@@ -20,7 +20,6 @@ func New() *MemoryStore {
 	}
 }
 
-
 func (m *MemoryStore) Enqueue(_ context.Context, j *Job, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

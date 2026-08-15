@@ -37,7 +37,7 @@ func TestRun(t *testing.T) {
 	want := uuid.NewString()
 
 	j := queue.Job{
-		ID: want,
+		ID:   want,
 		Kind: "test",
 	}
 	registry := &handler.Registry{}
@@ -46,7 +46,7 @@ func TestRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, interval + (200 * time.Millisecond))
+	ctx, cancel := context.WithTimeout(ctx, interval+(200*time.Millisecond))
 	defer cancel()
 
 	queues := []string{qname}

@@ -162,7 +162,7 @@ func (r *RedisStore) Fail(ctx context.Context, id, qname string, lastErrr error)
 		return err
 	}
 	if exists == 0 {
-		return ErrJobNotFound 
+		return ErrJobNotFound
 	}
 
 	if err := r.client.LRem(ctx, processingKey(qname), 1, id).Err(); err != nil {
