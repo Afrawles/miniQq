@@ -22,6 +22,7 @@ func Run(
 	defer pulse.Stop()
 
 	idx := 0
+	ctxWithoutCancel := context.WithoutCancel(ctx)
 
 	for {
 		select {
@@ -43,7 +44,7 @@ func Run(
 
 			hr, ok := registry.Get(job.Kind)
 			if !ok {
-				err = store.Fail(ctx, job.ID, qname, errors.New("job type/kind has not been registered yet"))
+				err = store.Fail(ctxWithoutCancel, job.ID, qname, errors.New("job type/kind has not been registered yet"))
 				if err != nil {
 					if errors.Is(err, queue.ErrJobNotFound) {
 						continue
@@ -66,7 +67,7 @@ func Run(
 			}(ctx, job.Payload)
 
 			if err != nil {
-				err = store.Fail(ctx, job.ID, qname, err)
+				err = store.Fail(ctxWithoutCancel, job.ID, qname, err)
 				if err != nil {
 					if errors.Is(err, queue.ErrJobNotFound) {
 						continue
@@ -76,7 +77,7 @@ func Run(
 				continue
 			}
 
-			err = store.Complete(ctx, job.ID, qname)
+			err = store.Complete(ctxWithoutCancel, job.ID, qname)
 			if err != nil {
 				return err
 			}

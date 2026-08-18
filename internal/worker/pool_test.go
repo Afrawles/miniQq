@@ -17,12 +17,12 @@ import (
 
 func TestConcurrentWorkerJobProcessing(t *testing.T) {
 	var (
-		sm sync.Map
-		claimedJobs uint64
+		sm             sync.Map
+		claimedJobs    uint64
 		dupliccateJobs uint64
-		nWorkers = 10
-		nJobs = 1000
-		jobType = "concurrent_test"
+		nWorkers       = 10
+		nJobs          = 1000
+		jobType        = "concurrent_test"
 	)
 	qname := "miniqq:" + uuid.NewString()
 
@@ -36,14 +36,14 @@ func TestConcurrentWorkerJobProcessing(t *testing.T) {
 	}
 	defer ms.Close()
 
-	// register job 
+	// register job
 	registry := &handler.Registry{}
-	
+
 	testHandler := func(ctx context.Context, payload json.RawMessage) error {
 		var job string
 
 		if err := json.Unmarshal(payload, &job); err != nil {
-			return err 
+			return err
 		}
 
 		if _, loaded := sm.LoadOrStore(job, struct{}{}); loaded {
@@ -57,17 +57,16 @@ func TestConcurrentWorkerJobProcessing(t *testing.T) {
 
 		return nil
 	}
-	
+
 	t.Run("register job handler", func(t *testing.T) {
 		if err := registry.Register(jobType, testHandler); err != nil {
 			t.Fatal(err)
 		}
 	})
-	
 
 	for range nJobs {
 		job := queue.Job{
-			ID: uuid.New().String(),
+			ID:   uuid.New().String(),
 			Kind: jobType,
 		}
 
@@ -86,7 +85,7 @@ func TestConcurrentWorkerJobProcessing(t *testing.T) {
 	queues := []string{qname}
 
 	if err := RunPool(ctx, ms, registry, queues, nWorkers); err != nil {
-			t.Fatal(err)
+		t.Fatal(err)
 	}
 
 	if got := atomic.LoadUint64(&dupliccateJobs); got != 0 {

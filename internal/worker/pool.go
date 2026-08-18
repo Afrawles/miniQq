@@ -19,7 +19,7 @@ func RunPool(
 	g, ctx := errgroup.WithContext(ctx)
 
 	for range nWorkers {
-		g.Go(func () error  {
+		g.Go(func() error {
 			return Run(ctx, store, registry, queues)
 		})
 	}
