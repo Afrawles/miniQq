@@ -10,7 +10,7 @@ import (
 	"github.com/Afrawles/miniQq/internal/queue"
 )
 
-var interval = 500 * time.Millisecond
+var interval = 100 * time.Millisecond
 
 func Run(
 	ctx context.Context,
