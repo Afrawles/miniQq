@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Afrawles/miniQq/internal/handler"
@@ -52,7 +53,19 @@ func Run(
 				continue
 			}
 
-			if err := hr(ctx, job.Payload); err != nil {
+			err = func(ctx context.Context, payload []byte) (result error) {
+				defer func() {
+					if r := recover(); r != nil {
+						result = fmt.Errorf("%v", r)
+					}
+
+				}()
+
+				return hr(ctx, payload)
+
+			}(ctx, job.Payload)
+
+			if err != nil {
 				err = store.Fail(ctx, job.ID, qname, err)
 				if err != nil {
 					if errors.Is(err, queue.ErrJobNotFound) {
