@@ -63,3 +63,19 @@ type Job struct {
 	ClaimedAt   int64     `redis:"claimed_at"`
 	Kind        string    `redis:"kind"`
 }
+
+type Filters struct {
+	Queue    string
+	Status   string
+	PageSize *int64
+}
+
+type QueueStats struct {
+	Queue      string `json:"queue"`
+	Ready      int64  `json:"ready"`
+	Processing int64  `json:"processing"`
+	Scheduled  int64  `json:"scheduled"`
+	Retry      int64  `json:"retry"`
+	Done       int64  `json:"done"`
+	Dead       int64  `json:"dead"`
+}

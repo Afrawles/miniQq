@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -143,7 +144,7 @@ func (r *RedisStore) Complete(ctx context.Context, id, qname string) error {
 		return err
 	}
 
-	if err := r.client.Incr(ctx, "stats:"+qname+":done").Err(); err != nil {
+	if err := r.client.Incr(ctx, doneKey(qname)).Err(); err != nil {
 		log.Printf("WARNING: failed to increment done stats for queue %q : %v", qname, err)
 	}
 
@@ -318,6 +319,144 @@ func (m *RedisStore) ReapStale(ctx context.Context, qname string, timeout time.D
 	}
 
 	return count, nil
+}
+
+func (m *RedisStore) List(ctx context.Context, filters Filters) (jobs []Job, err error) {
+	var (
+		cursor   uint64
+		queues   []string
+		match    = "queue:"
+		pageSize = int64(50)
+	)
+
+	if filters.PageSize == nil || *filters.PageSize == 0 {
+		filters.PageSize = &pageSize
+	}
+
+	if filters.Queue == "" {
+		match = match + "*"
+	} else {
+		match = fmt.Sprintf("%s%s:*", match, filters.Queue)
+	}
+
+	for {
+
+		keys, nextCoursor, err := m.client.Scan(ctx, cursor, match, *filters.PageSize).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		queues = append(queues, keys...)
+
+		cursor = nextCoursor
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	for _, v := range queues {
+		var elems []string
+		var err error
+
+		if strings.HasSuffix(v, ":scheduled") || strings.HasSuffix(v, ":retry") {
+			elems, err = m.client.ZRange(ctx, v, 0, -1).Result()
+		} else {
+			elems, err = m.client.LRange(ctx, v, 0, -1).Result()
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, j := range elems {
+			var job Job
+			if err := m.client.HGetAll(ctx, "job:"+j).Scan(&job); err != nil {
+				return nil, err
+			}
+
+			if filters.Status != "" {
+				if job.Status.String() != filters.Status {
+					continue
+				}
+			}
+			jobs = append(jobs, job)
+		}
+
+	}
+
+	if jobs == nil {
+		jobs = []Job{}
+	}
+
+	return jobs, nil
+
+}
+
+func (m *RedisStore) Stats(ctx context.Context, qname string) (stats QueueStats, err error) {
+	var (
+		done       int
+		ready      int64
+		processing int64
+		scheduled  int64
+		retry      int64
+		dead       int64
+	)
+
+	stats.Queue = qname
+
+	value, err := m.client.Get(ctx, doneKey(qname)).Result()
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+
+			return QueueStats{}, err
+		}
+		value = "0"
+	}
+
+	done, err = strconv.Atoi(value)
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Done = int64(done)
+
+	processing, err = m.client.LLen(ctx, processingKey(qname)).Result()
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Processing = processing
+
+	retry, err = m.client.ZCard(ctx, retryKey(qname)).Result()
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Retry = retry
+
+	dead, err = m.client.LLen(ctx, deadKey(qname)).Result()
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Dead = dead
+
+	ready, err = m.client.LLen(ctx, readKey(qname)).Result()
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Ready = ready
+
+	scheduled, err = m.client.ZCard(ctx, scheduledKey(qname)).Result()
+	if err != nil {
+		return QueueStats{}, err
+	}
+
+	stats.Scheduled = scheduled
+
+	return
 }
 
 func callEvalScript(ctx context.Context, m *RedisStore, script string, keys []string, args []any) (int64, error) {
