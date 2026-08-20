@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"log"
 	"os/signal"
@@ -27,7 +26,7 @@ func main() {
 	}
 
 	registry := &handler.Registry{}
-	_ = registry.Register("kind", loghandler)
+	_ = registry.Register("send_emal", loghandler)
 
 	go func() {
 		<-ctx.Done()
@@ -35,7 +34,8 @@ func main() {
 		log.Fatal("forceful shutdown: workers didnt finish in time")
 	}()
 
-	if err := worker.RunPool(ctx, store, registry, []string{"log"}, 2); err != nil {
+	// TODO: pass queue from config
+	if err := worker.RunPool(ctx, store, registry, []string{"default"}, 2); err != nil {
 		log.Fatal(err)
 	}
 
@@ -43,7 +43,7 @@ func main() {
 
 }
 
-func loghandler(_ context.Context, _ json.RawMessage) error {
+func loghandler(_ context.Context, _ queue.Payload) error {
 	log.Println("<<<log handler >>>")
 	return nil
 }

@@ -2,12 +2,13 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/Afrawles/miniQq/internal/queue"
 )
 
-type Handler func(ctx context.Context, payload json.RawMessage) error
+type Handler func(ctx context.Context, payload queue.Payload) error
 
 type Registry struct {
 	mu       sync.RWMutex

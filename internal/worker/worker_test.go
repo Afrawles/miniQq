@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ var (
 func TestRun(t *testing.T) {
 	var ran bool
 
-	testHandler := func(ctx context.Context, payload json.RawMessage) error {
+	testHandler := func(ctx context.Context, payload queue.Payload) error {
 		ran = true
 		return nil
 	}
@@ -66,7 +65,7 @@ func TestRun(t *testing.T) {
 
 func TestRecoveryOnPanicFailsJob(t *testing.T) {
 	testErr := "test recovery"
-	testHandler := func(ctx context.Context, payload json.RawMessage) error {
+	testHandler := func(ctx context.Context, payload queue.Payload) error {
 		panic(testErr)
 	}
 

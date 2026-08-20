@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/Afrawles/miniQq/internal/queue"
 )
 
 type testPayLoad struct {
@@ -17,7 +19,7 @@ func printPayload(kind, greeting string) error {
 	return nil
 }
 
-func processorFunc(_ context.Context, payload json.RawMessage) error {
+func processorFunc(_ context.Context, payload queue.Payload) error {
 	var tp testPayLoad
 	err := json.Unmarshal(payload, &tp)
 

@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -44,6 +45,35 @@ func (js *JobState) UnmarshalBinary(data []byte) error {
 		*js = StatusProcessing
 	case "completed":
 		*js = StatusDone
+	case "failed":
+		*js = StatusFailed
+	case "dead":
+		*js = StatusDead
+	default:
+		*js = StatusUnknown
+	}
+	return nil
+}
+
+
+func (js JobState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(js.String())
+}
+
+func (js *JobState) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "pending":
+		*js = StatusPending
+	case "processing":
+		*js = StatusProcessing
+	case "completed":
+		*js = StatusDone
+	case "failed":
+		*js = StatusFailed
 	case "dead":
 		*js = StatusDead
 	default:

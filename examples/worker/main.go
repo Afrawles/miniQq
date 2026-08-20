@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"os/signal"
 	"syscall"
 
 	miniqq "github.com/Afrawles/miniQq"
+	"github.com/Afrawles/miniQq/internal/queue"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	}
 
 	registry := miniqq.NewRegistry()
-	registry.Register("email", func(ctx context.Context, payload json.RawMessage) error {
+	registry.Register("email", func(ctx context.Context, payload queue.Payload) error {
 		log.Println("prcoessing send email: ", string(payload))
 		return nil
 	})

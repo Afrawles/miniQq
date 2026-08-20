@@ -39,7 +39,7 @@ func TestConcurrentWorkerJobProcessing(t *testing.T) {
 	// register job
 	registry := &handler.Registry{}
 
-	testHandler := func(ctx context.Context, payload json.RawMessage) error {
+	testHandler := func(ctx context.Context, payload queue.Payload) error {
 		var job string
 
 		if err := json.Unmarshal(payload, &job); err != nil {
