@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	RAddr string
+	RAddr         string
+	TrustedOrigin string
 }
 type App struct {
 	Config Config
@@ -26,5 +27,20 @@ func (app *App) Server() {
 	mux.HandleFunc("GET /api/jobs", app.HandleGetJobs)
 	mux.HandleFunc("GET /api/queues/{name}/stats", app.HandleGetQueueStats)
 
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":8080", app.corsMiddleware(mux)))
+}
+
+func (app *App) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", app.Config.TrustedOrigin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

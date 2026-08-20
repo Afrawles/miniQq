@@ -12,6 +12,7 @@ import (
 func main() {
 	cfg := api.Config{}
 	flag.StringVar(&cfg.RAddr, "addr", "localhost:6379", "Redis Address")
+	flag.StringVar(&cfg.TrustedOrigin, "trusted-origins", "http://localhost:5173", "Trusted Orign for web UI")
 	flag.Parse()
 
 	store, err := queue.NewRedisStore(context.Background(), cfg.RAddr)

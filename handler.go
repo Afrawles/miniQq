@@ -6,6 +6,5 @@ type Handler = handler.Handler
 type Registry = handler.Registry
 
 func NewRegistry() *Registry {
-	return  &Registry{}
+	return &Registry{}
 }
-

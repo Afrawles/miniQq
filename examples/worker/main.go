@@ -28,5 +28,5 @@ func main() {
 	if err := miniqq.RunPool(ctx, store, registry, []string{"email"}, 10); err != nil {
 		log.Fatal(err)
 	}
-	
+
 }

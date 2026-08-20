@@ -81,12 +81,11 @@ func TestPostJobs(t *testing.T) {
 	})
 }
 
-
 func TestJobListQueueStats(t *testing.T) {
 	var (
 		qname   = "handler-test"
-		jobType   = "handler-type"
-		nJobs = 10
+		jobType = "handler-type"
+		nJobs   = 10
 	)
 	s := miniredis.RunT(t)
 	ctx := context.Background()
@@ -172,7 +171,7 @@ func TestJobListQueueStats(t *testing.T) {
 		}
 
 		var stats queue.QueueStats
-		
+
 		if err := json.Unmarshal([]byte(resp.Body.String()), &stats); err != nil {
 			t.Fatal(err)
 		}
@@ -185,12 +184,11 @@ func TestJobListQueueStats(t *testing.T) {
 			t.Errorf("expected %d , got %d", nJobs, stats.Ready)
 		}
 
-		if (
-		stats.Done != 0 || 
-		stats.Scheduled != 0 || 
-		stats.Processing != 0 || 
-		stats.Dead != 0 || 
-		stats.Retry != 0) {
+		if stats.Done != 0 ||
+			stats.Scheduled != 0 ||
+			stats.Processing != 0 ||
+			stats.Dead != 0 ||
+			stats.Retry != 0 {
 			t.Error("expected remaining queues to have no elems")
 		}
 	})
