@@ -1,4 +1,4 @@
-.PHONY: help test test-race test-unit test-integration test-run
+.PHONY: help test test-race test-unit test-integration test-run enqueue-job
 
 .DEFAULT_GOAL := help
 
@@ -26,3 +26,14 @@ test-run: ## Run one test by name: make test-run TEST=Name [COUNT=10] [TAGS=inte
 # go test -tags=integration -race -v -run TestConcurrentNoDoubleClaim ./...
 # go test -run 'TestClaim' ./...
 # go test -count=10 -race -v -run TestConcurrentWorkerJobProcessing ./internal/worker/...
+
+
+HOST ?= http://localhost:8080
+QUEUE ?= default
+TYPE ?= send_email
+PAYLOAD ?= {}
+
+enqueue-job: ## Post a job to /api/jobs: make enqueue-job [QUEUE=default] [TYPE=send_email] [PAYLOAD='{"to":"x"}']
+	@curl -X POST $(HOST)/api/jobs \
+		-H "Content-Type: application/json" \
+		-d '{"queue":"$(QUEUE)","type":"$(TYPE)","payload":$(PAYLOAD)}'

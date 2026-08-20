@@ -14,7 +14,7 @@ func (app *App) HandleEnqueueJob(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Queue   string          `json:"queue"`
 		Type    string          `json:"type"`
-		Payload json.RawMessage `json:"payload"`
+		Payload queue.Payload `json:"payload"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -22,7 +22,7 @@ func (app *App) HandleEnqueueJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: add validations for fields esp. Queus etc..
+
 	job := queue.Job{
 		ID:      uuid.NewString(),
 		Payload: input.Payload,
@@ -40,6 +40,8 @@ func (app *App) HandleEnqueueJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not process request", http.StatusInternalServerError)
 		return
 	}
+
+	b = append(b, '\n')
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
