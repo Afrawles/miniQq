@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -93,6 +95,8 @@ func (r *RedisStore) EnqueueAt(ctx context.Context, job *Job, runAt time.Time, q
 		return err
 	}
 
+	job.RunAt.TT = runAt
+
 	return nil
 }
 
@@ -121,9 +125,9 @@ func (r *RedisStore) Dequeue(ctx context.Context, qname string) (*Job, error) {
 		return nil, err
 	}
 
-	job.ClaimedAt = time.Now().Unix()
+	job.ClaimedAt = UnixTime{TT: time.Now()}
 
-	if err := r.client.HSet(ctx, k, "claimed_at", float64(time.Now().Unix())).Err(); err != nil {
+	if err := r.client.HSet(ctx, k, "claimed_at", job.ClaimedAt.TT.Unix()).Err(); err != nil {
 		return nil, err
 	}
 
@@ -144,7 +148,7 @@ func (r *RedisStore) Complete(ctx context.Context, id, qname string) error {
 		return err
 	}
 
-	if err := r.client.Incr(ctx, doneKey(qname)).Err(); err != nil {
+	if err := r.client.HIncrBy(ctx, doneKey(qname), "count", 1).Err(); err != nil {
 		log.Printf("WARNING: failed to increment done stats for queue %q : %v", qname, err)
 	}
 
@@ -185,7 +189,7 @@ func (r *RedisStore) Fail(ctx context.Context, id, qname string, lastErrr error)
 	if job.Attempts < job.GetMaxAttempts() {
 		b = r.nextBackoff(&job)
 		now := time.Now()
-		job.RunAt = now.Add(b)
+		job.RunAt = UnixTime{TT: now.Add(b)}
 
 		r.client.ZAdd(ctx, retryKey(qname), redis.Z{
 			Score:  float64(now.Add(b).Unix()),
@@ -321,12 +325,13 @@ func (m *RedisStore) ReapStale(ctx context.Context, qname string, timeout time.D
 	return count, nil
 }
 
+// TODO: add pagination
 func (m *RedisStore) List(ctx context.Context, filters Filters) (jobs []Job, err error) {
 	var (
 		cursor   uint64
 		queues   []string
 		match    = "queue:"
-		pageSize = int64(50)
+		pageSize = int64(10)
 	)
 
 	if filters.PageSize == nil || *filters.PageSize == 0 {
@@ -359,6 +364,10 @@ func (m *RedisStore) List(ctx context.Context, filters Filters) (jobs []Job, err
 		var elems []string
 		var err error
 
+		if strings.HasSuffix(v, ":done") || strings.HasSuffix(v, ":dead") {
+			continue
+		}
+
 		if strings.HasSuffix(v, ":scheduled") || strings.HasSuffix(v, ":retry") {
 			elems, err = m.client.ZRange(ctx, v, 0, -1).Result()
 		} else {
@@ -381,6 +390,10 @@ func (m *RedisStore) List(ctx context.Context, filters Filters) (jobs []Job, err
 				}
 			}
 			jobs = append(jobs, job)
+
+			if len(jobs) >= int(pageSize) {
+				break
+			}
 		}
 
 	}
@@ -388,6 +401,10 @@ func (m *RedisStore) List(ctx context.Context, filters Filters) (jobs []Job, err
 	if jobs == nil {
 		jobs = []Job{}
 	}
+
+	slices.SortFunc(jobs, func(a, b Job) int {
+		return cmp.Compare(b.CreatedAt.TT.Unix(), a.CreatedAt.TT.Unix())
+	})
 
 	return jobs, nil
 
@@ -405,7 +422,7 @@ func (m *RedisStore) Stats(ctx context.Context, qname string) (stats QueueStats,
 
 	stats.Queue = qname
 
-	value, err := m.client.Get(ctx, doneKey(qname)).Result()
+	value, err := m.client.HGet(ctx, doneKey(qname), "count").Result()
 	if err != nil {
 		if !errors.Is(err, redis.Nil) {
 

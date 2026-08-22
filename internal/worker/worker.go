@@ -54,7 +54,7 @@ func Run(
 				continue
 			}
 
-			err = func(ctx context.Context, payload []byte) (result error) {
+			err = func(ctx context.Context, payload queue.Payload) (result error) {
 				defer func() {
 					if r := recover(); r != nil {
 						result = fmt.Errorf("%v", r)

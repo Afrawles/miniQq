@@ -26,7 +26,7 @@ func main() {
 	}
 
 	registry := &handler.Registry{}
-	_ = registry.Register("send_emal", loghandler)
+	_ = registry.Register("send_email", loghandler)
 
 	go func() {
 		<-ctx.Done()

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Afrawles/miniQq/internal/queue"
 	"github.com/google/uuid"
@@ -12,8 +13,8 @@ import (
 // TODO: logging
 func (app *App) HandleEnqueueJob(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Queue   string          `json:"queue"`
-		Type    string          `json:"type"`
+		Queue   string        `json:"queue"`
+		Type    string        `json:"type"`
 		Payload queue.Payload `json:"payload"`
 	}
 
@@ -22,12 +23,14 @@ func (app *App) HandleEnqueueJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ut := queue.UnixTime{TT: time.Now()}
 
 	job := queue.Job{
-		ID:      uuid.NewString(),
-		Payload: input.Payload,
-		Kind:    input.Type,
-		Queue:   input.Queue,
+		ID:        uuid.NewString(),
+		Payload:   input.Payload,
+		Kind:      input.Type,
+		Queue:     input.Queue,
+		CreatedAt: ut,
 	}
 
 	if err := app.Store.Enqueue(r.Context(), &job, job.Queue); err != nil {
@@ -76,7 +79,7 @@ func (app *App) HandleGetJobs(w http.ResponseWriter, r *http.Request) {
 
 	jobs, err := app.Store.List(r.Context(), input)
 	if err != nil {
-		http.Error(w, "unable to process reques", http.StatusInternalServerError)
+		http.Error(w, "unable to process queues", http.StatusInternalServerError)
 		return
 	}
 

@@ -39,9 +39,9 @@ func TestPostJobs(t *testing.T) {
 	defer ms.Close()
 
 	input := struct {
-		Queue   string          `json:"queue"`
-		Type    string          `json:"type"`
-		Payload json.RawMessage `json:"payload"`
+		Queue   string        `json:"queue"`
+		Type    string        `json:"type"`
+		Payload queue.Payload `json:"payload"`
 	}{
 		Queue:   qname,
 		Type:    jType,

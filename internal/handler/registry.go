@@ -38,5 +38,5 @@ func (r *Registry) Get(kind string) (Handler, bool) {
 	if !ok {
 		return nil, false
 	}
-	return v, true
+	return v, ok
 }

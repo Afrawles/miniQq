@@ -2,6 +2,8 @@ package queue
 
 import (
 	"encoding/json"
+	"errors"
+	"strconv"
 	"time"
 )
 
@@ -55,7 +57,6 @@ func (js *JobState) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-
 func (js JobState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(js.String())
 }
@@ -83,17 +84,17 @@ func (js *JobState) UnmarshalJSON(data []byte) error {
 }
 
 type Job struct {
-	ID          string          `redis:"id" json:"id"`
-	Queue       string          `redis:"queue" json:"queue"`
-	Payload     Payload `redis:"payload" json:"payload"`
-	Status      JobState        `redis:"status" json:"status"`
-	Attempts    int64           `redis:"attempts" json:"attempts"`
-	MaxAttempts *int64          `redis:"max_attempts" json:"max_attempts"`
-	RunAt       time.Time       `redis:"run_at" json:"run_at"`
-	CreatedAt   time.Time       `redis:"created_at" json:"created_at"`
-	LastError   string          `redis:"last_error" json:"last_error"`
-	ClaimedAt   int64           `redis:"claimed_at" json:"claimed_at"`
-	Kind        string          `redis:"kind" json:"kind"`
+	ID          string   `redis:"id" json:"id"`
+	Queue       string   `redis:"queue" json:"queue"`
+	Payload     Payload  `redis:"payload" json:"payload"`
+	Status      JobState `redis:"status" json:"status"`
+	Attempts    int64    `redis:"attempts" json:"attempts"`
+	MaxAttempts *int64   `redis:"max_attempts" json:"max_attempts"`
+	RunAt       UnixTime `redis:"run_at" json:"run_at,format:datetime"`
+	CreatedAt   UnixTime `redis:"created_at" json:"created_at,format:datetime"`
+	LastError   string   `redis:"last_error" json:"last_error"`
+	ClaimedAt   UnixTime `redis:"claimed_at" json:"claimed_at,format:datetime"`
+	Kind        string   `redis:"kind" json:"kind"`
 }
 
 type Payload []byte
@@ -103,6 +104,7 @@ func (p Payload) MarshalBinary() ([]byte, error) {
 }
 
 func (p *Payload) UnmarshalBinary(data []byte) error {
+	*p = data
 	return nil
 }
 
@@ -116,6 +118,45 @@ func (p Payload) MarshalJSON() ([]byte, error) {
 
 func (p *Payload) UnmarshalJSON(data []byte) error {
 	*p = data
+	return nil
+}
+
+type UnixTime struct {
+	TT time.Time
+}
+
+func (ut UnixTime) MarshalBinary() ([]byte, error) {
+	return []byte(strconv.FormatInt(ut.TT.Unix(), 10)), nil
+}
+
+func (ut *UnixTime) UnmarshalBinary(data []byte) error {
+	sec, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return errors.New("invalid unix timestamp")
+	}
+
+	ut.TT = time.Unix(sec, 0)
+	return nil
+}
+
+func (ut UnixTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ut.TT)
+}
+
+func (ut *UnixTime) UnmarshalJSON(data []byte) error {
+	var timeStr string
+
+	if err := json.Unmarshal(data, &timeStr); err != nil {
+		return err
+	}
+
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return err
+	}
+
+	ut.TT = t
+
 	return nil
 }
 

@@ -37,3 +37,9 @@ enqueue-job: ## Post a job to /api/jobs: make enqueue-job [QUEUE=default] [TYPE=
 	@curl -X POST $(HOST)/api/jobs \
 		-H "Content-Type: application/json" \
 		-d '{"queue":"$(QUEUE)","type":"$(TYPE)","payload":$(PAYLOAD)}'
+
+run-worker:
+	go run cmd/worker/main.go
+
+run-api:
+	go run cmd/api/main.go
